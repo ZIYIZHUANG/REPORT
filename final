@@ -1,0 +1,43 @@
+echo "# REPORT" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git remote add origin https://github.com/ZIYIZHUANG/REPORT.git
+git push -u origin master
+
+""""
+!apt-get install -y -qq software-properties-common python-software-properties module-init-tools
+!add-apt-repository -y ppa:alessandro-strada/ppa 2>&1 > /dev/null
+!apt-get update -qq 2>&1 > /dev/null
+!apt-get -y install -qq google-drive-ocamlfuse fuse
+from google.colab import auth
+auth.authenticate_user()
+from oauth2client.client import GoogleCredentials
+creds = GoogleCredentials.get_application_default()
+import getpass
+!google-drive-ocamlfuse -headless -id={creds.client_id} -secret={creds.client_secret} < /dev/null 2>&1 | grep URL
+vcode = getpass.getpass()
+!echo {vcode} | google-drive-ocamlfuse -headless -id={creds.client_id} -secret={creds.client_secret}
+""""
+
+!mkdir -p drive
+!google-drive-ocamlfuse drive
+
+_weights = {
+        'wc1': tf.Variable(tf.truncated_normal([5, 5, 3, 36], stddev=0.05)),
+        'wc2': tf.Variable(tf.truncated_normal([5, 5, 36, 96], stddev=0.05)),
+        'wc3': tf.Variable(tf.truncated_normal([3, 3, 96, 128], stddev=0.05)),
+        'wc4': tf.Variable(tf.truncated_normal([3, 3, 128, 256], stddev=0.05)),
+        'wc5': tf.Variable(tf.truncated_normal([3, 3, 256, 256], stddev=0.05)),
+        'wd2': tf.Variable(tf.truncated_normal([512, 512], stddev=0.05)),
+        'out': tf.Variable(tf.truncated_normal([512, n_classes], stddev=0.05))
+    }
+_biases = {
+        'bc1': tf.Variable(tf.truncated_normal([36], stddev=0.1)),
+        'bc2': tf.Variable(tf.truncated_normal([96], stddev=0.1)),
+        'bc3': tf.Variable(tf.truncated_normal([128], stddev=0.1)),
+        'bc4': tf.Variable(tf.truncated_normal([256], stddev=0.1)),
+        'bc5': tf.Variable(tf.truncated_normal([256], stddev=0.1)),
+        'bd2': tf.Variable(tf.truncated_normal([512], stddev=0.1)),
+        'out': tf.Variable(tf.truncated_normal([n_classes], mean=0.1, stddev=0.1))
+    }
