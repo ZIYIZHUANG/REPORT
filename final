@@ -41,3 +41,209 @@ _biases = {
         'bd2': tf.Variable(tf.truncated_normal([512], stddev=0.1)),
         'out': tf.Variable(tf.truncated_normal([n_classes], mean=0.1, stddev=0.1))
     }
+
+
+def relu(x,name="activation"):
+    return tf.nn.relu(x, name=name)
+    
+def conv2d(name, l_input, w, b, s, p, scope):
+    l_input = tf.nn.conv2d(l_input, w, strides=[1,s,s,1], padding=p, name=name)
+    l_input = l_input+b
+    l_input = relu(l_input)
+
+    return l_input
+
+def max_pool(name, l_input, k, s):
+    return tf.nn.max_pool(l_input, ksize=[1, k, k, 1], strides=[1, s, s, 1], padding='VALID', name=name)
+
+def norm(l_input, lsize=4, name="lrn"):
+    return tf.nn.lrn(l_input, lsize, bias=1.0, alpha=0.001 / 9.0, beta=0.75, name=name)
+
+def alex_net(_X, _dropout, batch_size):
+    conv1 = conv2d('conv1', _X, _weights['wc1'], _biases['bc1'], 3, 'SAME', 'conv1')
+    pool1 = max_pool('pool1', conv1, k=3,s=2)
+    conv2 = conv2d('conv2', pool1, _weights['wc2'], _biases['bc2'], 1, 'SAME', 'conv2')
+    pool2 = max_pool('pool2', conv2, k=3,s=2)
+    conv3 = conv2d('conv3', pool2, _weights['wc3'], _biases['bc3'], 1, 'SAME', 'conv3')
+    conv4 = conv2d('conv4', conv3, _weights['wc4'], _biases['bc4'], 1, 'SAME', 'conv4')
+    conv5 = conv2d('conv5', conv4, _weights['wc5'], _biases['bc5'], 1, 'SAME', 'conv5')
+    # Find current size of conv5 to fit the requirement of FC1.
+    sizes = conv5.get_shape().as_list()
+    neurons =  sizes[1]*sizes[2]*sizes[3]
+    dense1 = tf.reshape(conv5, [batch_size, neurons]) # Reshape conv5 output to fit dense layer input
+    wei_den1 = tf.Variable(tf.truncated_normal([neurons, 512], stddev=0.01))
+    b_den1 = tf.Variable(tf.truncated_normal([512], stddev=0.1))
+    
+    dense1 = relu(tf.matmul(dense1, wei_den1) + b_den1, name='fc1') # Relu activation
+    dd1=tf.nn.dropout(dense1, _dropout)
+    dense2 = relu(tf.matmul(dd1, _weights['wd2']) + _biases['bd2'], name='fc2') # Relu activation
+    dd2=tf.nn.dropout(dense2, _dropout)
+    out = tf.matmul(dd2, _weights['out']) + _biases['out'] # Relu activation
+
+    return out
+    
+#--------建立讀取圖檔方法 opencv read img & reshape32*32 灰階----- 
+def getimagedictandreshape(train_image_dir):     #圖檔位置
+    global imagee,res
+    imagee=cv2.imread(train_image_dir,cv2.IMREAD_GRAYSCALE)
+    #res=cv2.resize(imagee,(32,32),interpolation=cv2.INTER_CUBIC)
+    
+    return imagee
+#--------
+
+def train_image_label_list(train_list, train_image_dir):
+    f = open(train_list,'r')
+    filenames = []
+    labels = []
+    
+    for line in f:
+      filename, label = line[:-1].split(' ')
+      filename = train_image_dir+filename
+      filenames.append(filename)
+      labels.append(int(label))
+      
+    return filenames, labels
+
+  
+def test_image_filename_list(train_list, train_image_dir):
+    f = open(train_list,'r')
+    filenames = []
+    labels = []
+    
+    for line in f:
+      filename= line[:-1]
+      filename = train_image_dir+filename
+      filenames.append(filename)
+      #labels.append(int(label))
+      
+    return filenames, labels
+
+
+def write_labeled_image_list(image_list_file, dict_test):        #label資料,圖檔位置
+    f = open(image_list_file, 'w')
+    filenames = []
+    labels = []
+
+    for line in f:
+        filename, label = line[:-1].split(',')
+        filename = dict_test+filename
+        filenames.append(filename)
+        labels.append(int(label))
+        
+    return filenames, labels
+
+
+def getvalbatch(resdict, labels, glen1):
+    global b_count2, seq2
+    b_count = b_count2
+    idx = (b_count*batch_size)%glen1
+    bx=[]
+    by=[]
+    for i in range(batch_size):
+      #---------opencv read img & reshape
+      bx.append(resdict)
+      by.append(labels)
+      #---------
+      
+    
+    bx = np.reshape(np.asarray(bx), [batch_size, 256, 256, 3])
+    by = np.asarray(by)
+    b_count2 +=1
+    return bx, by
+  
+def getbatch(resdict2, labels, glen1):
+    global b_count, seq1
+    idx = (b_count*batch_size)%glen1
+    bx=[]
+    by=[]
+    for i in range(batch_size):
+      #---------opencv read img & reshape
+      bx.append(resdict2)
+      by.append(labels)
+      #---------
+    
+    
+    bx = np.reshape(np.asarray(bx), [batch_size, 256, 256, 3])
+    by = np.asarray(by)
+    b_count +=1
+    return bx, by
+
+# Training setting
+batch_size =20
+display_step = 400
+n_classes = 100 # # of classes
+dropout = 0.8# Dropout rate
+
+
+keep_prob = tf.placeholder(tf.float32)          # Dropout rate to be fed
+learning_rate = tf.placeholder(tf.float32)      # Learning rate to be fed
+tX = tf.placeholder("float", [batch_size, 256, 256, 3]) # Training data batch
+tY = tf.placeholder("int64", [batch_size])            # Training label batch
+lr = 1e-3                                    # Learning rate start
+tst = tf.placeholder(tf.bool)
+iter = tf.placeholder(tf.int32)
+
+trainlist, trainimagedir = train_image_label_list("drive/aoi/train3.txt","drive/I_img_train")
+
+dict1 = getimagedictandreshape("drive/I_img_train")
+labels= np.asarray(trainlist)
+lab=str(labels)
+data = np.asarray(dict1, np.float32)/255
+glen1 = len(labels)
+training_iters = glen1 * 1000
+
+testlist, testimagedir = test_image_filename_list("drive/aoi/test3.txt","drive/I_img_test")
+
+dict2 = getimagedictandreshape("drive/I_img_test")
+filenames= np.asarray(testlist)
+data2 = np.asarray(dict2, np.float32)/255
+tlen1 = len(filenames)
+
+
+
+#print("Total labels=%d"%(max(lab)+1))
+
+print("Found %d training images & %d test images"%(glen1, tlen1))
+
+pred = alex_net(tX,keep_prob,batch_size)
+
+cost = tf.losses.sparse_softmax_cross_entropy(labels=tY, logits=pred)
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(cost)
+correct_prediction = tf.equal(tf.argmax(pred, 1), tY)
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+saver = tf.train.Saver()
+init = tf.global_variables_initializer()
+with tf.Session() as sess:
+    sess.run(init)
+    step = 0
+    while step * batch_size < training_iters:
+        epoch1=np.floor((step*batch_size)/glen1)
+        bx, by = getbatch(data, labels, glen1)
+
+        # Get a batch
+        sess.run([optimizer],  feed_dict={tX:bx, tY:by, keep_prob: dropout, learning_rate: lr})
+        
+        if (step % 15000==1) & (step>15000):
+            save_path = saver.save(sess, "drive/checkpoint/tf_alex_model_iter" + str(step) + ".ckpt")
+            print("Model saved in file at iteration %d: %s" % (step*batch_size,save_path))
+
+        if step % display_step == 1:
+            # calculate the loss
+            tbx, tby = getvalbatch(data2, labels2, tlen1)
+            loss = sess.run(cost, feed_dict={tX:bx, tY:by, keep_prob: 1., tst:True, iter:step})
+            acc = sess.run(accuracy, feed_dict={tX:bx, tY:by,keep_prob: 1., tst:True, iter:step})
+            acc2 = []
+            for j in range(int(tlen1 / batch_size)):
+              acc2.append(sess.run(accuracy, feed_dict={tX:tbx, tY:tby,keep_prob: 1., tst:True, iter:step}))
+            acc2 = np.mean(acc2)
+            
+            print("Iter=%d/epoch=%d, Loss=%.6f, Training Accuracy=%.6f, Test Accuracy=%.6f, lr=%f" % (step*batch_size, epoch1 ,loss, acc, acc2, lr))
+
+        step += 1
+    print("Optimization Finished!")
+    save_path = saver.save(sess, "drive/checkpoint/tf_alex_model.ckpt")
+print("Model saved in file: %s" % save_path)
+
+
+exit()
